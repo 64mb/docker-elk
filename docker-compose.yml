@@ -1,0 +1,109 @@
+version: '3.4'
+services:
+  traefik:
+    image: traefik:2.5.2
+    container_name: traefik
+    restart: always
+    command:
+      - "--api=true"
+      - "--providers.docker=true"
+      - "--providers.docker.network=${COMPOSE_PROJECT_NAME}_web"
+      - "--providers.docker.watch=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.traefik.acme.email=${ACME_EMAIL:?err}"
+      - "--certificatesresolvers.traefik.acme.storage=/lets_encrypt/acme.json"
+      - "--certificatesresolvers.traefik.acme.httpchallenge.entrypoint=web"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api.rule=Host(`traefik.${DOMAIN_KIBANA:?err}`)
+      - traefik.http.routers.api.service=api@internal
+      - traefik.http.routers.api.middlewares=ip-white,auth
+      - traefik.http.middlewares.auth.basicauth.users=${HT_PASSWD:?err}
+      - traefik.http.middlewares.ip-white.ipwhitelist.sourcerange=${IP_FILTER:-0.0.0.0/0}
+      - traefik.http.routers.api.tls.certresolver=traefik
+      - traefik.http.routers.api.tls=true
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - lets_encrypt:/lets_encrypt
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - web
+
+  kibana:
+    build:
+      context: ./kibana
+      dockerfile: ./dockerfile
+    image: kibana:${VERSION:?lost VERSION variable}
+    container_name: kibana
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.middlewares.ip-white.ipwhitelist.sourcerange=${IP_FILTER:-0.0.0.0/0}
+      # - traefik.http.middlewares.auth-kibana.basicauth.users=${HT_PASSWD_KIBANA:?err}
+      # - traefik.http.routers.kibana.middlewares=ip-white,auth-kibana
+      - traefik.http.routers.kibana.middlewares=ip-white
+      - traefik.http.services.kibana.loadbalancer.server.port=5601
+      - traefik.http.routers.kibana.rule=Host(`${DOMAIN_KIBANA:?err}`)
+      - traefik.http.routers.kibana.tls.certresolver=traefik
+      - traefik.http.routers.kibana.tls=true
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:?err}
+    healthcheck:
+      test: curl -s https://localhost:5601 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - web
+
+  elasticsearch:
+    build:
+      context: ./elasticsearch
+      dockerfile: ./dockerfile
+    image: elasticsearch:${VERSION:?lost VERSION variable}
+    container_name: elasticsearch
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.elasticsearch.loadbalancer.server.port=9200
+      - traefik.http.routers.elasticsearch.rule=Host(`${DOMAIN_ELASTIC:?err}`)
+      # - traefik.http.routers.elasticsearch.middlewares=auth-elasticsearch
+      # - traefik.http.middlewares.auth-elasticsearch.basicauth.users=${HT_PASSWD_ELASTIC:?err}
+      - traefik.http.routers.elasticsearch.tls.certresolver=traefik
+      - traefik.http.routers.elasticsearch.tls=true
+    healthcheck:
+      test: curl -s https://localhost:5601 >/dev/null; if [[ $$? == 52 ]]; then echo 0; else echo 1; fi
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xmx11716m"
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:?err}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ${ELASTIC_DB_DATA:?err}:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  lets_encrypt:

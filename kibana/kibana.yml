@@ -1,0 +1,33 @@
+server.name: kibana
+server.host: 0.0.0.0
+elasticsearch.hosts: [ "http://elasticsearch:9200" ]
+
+xpack.security.enabled: true
+
+
+monitoring.ui.container.elasticsearch.enabled: false
+telemetry.enabled: false
+monitoring.enabled: false
+monitoring.ui.enabled: false
+enterpriseSearch.enabled: false
+newsfeed.enabled: false
+
+# xpack.alerts.enabled: false
+
+# xpack.securitySolution.enabled: false
+xpack.observability.enabled: false
+xpack.uptime.enabled: false
+xpack.actions.enabled: false
+
+xpack.apm.enabled: false
+xpack.fleet.enabled: false
+xpack.apm.ui.enabled: false
+xpack.searchprofiler.enabled: false
+
+xpack.ml.enabled: false
+xpack.infra.enabled: false
+xpack.logstash.enabled: false
+xpack.canvas.enabled: false
+xpack.reporting.enabled: false
+# xpack.encryptedSavedObjects.encryptionKey: 
+# xpack.security.encryptionKey: 
